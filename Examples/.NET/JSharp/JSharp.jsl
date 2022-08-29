@@ -1,0 +1,193 @@
+package JSharp;
+
+import System.*;
+import System.Text.*;
+import System.Runtime.InteropServices.*;
+import Spcm.*;
+
+public class Example
+	{
+	public static void main(String[] args)
+		{
+		IntPtr hDevice, pBuffer;
+		GCHandle hBufferHandle;
+		long llMemSet, llAverage, llInstMem, llMaxSamplerate;
+		int i, lErrorVal, lCardType, lSerialNumber, lMaxChannels, lBytesPerSample, lValue;
+		short nMin, nMax;
+		UInt32 dwErrorReg, dwErrorCode;
+		short[] nData;
+		byte[] byData;
+
+		StringBuilder sErrorText = new StringBuilder(1024);
+
+		lErrorVal		= 0;
+		lCardType		= 0;
+		lSerialNumber	= 0;
+		lMaxChannels    = 0;
+		lBytesPerSample = 0;
+		lValue			= 0;
+		llMemSet		= 16384;
+		dwErrorReg		= (UInt32)0;
+		llInstMem		= 0;
+		llMaxSamplerate = 0;
+
+		// ----- open card -----
+		hDevice = Drv.spcm_hOpen("/dev/spcm0");
+
+		if (hDevice == IntPtr.Zero)
+			System.out.println("Error: Could not open card\n");
+		else
+			{
+			// ----- get card type -----
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_PCITYP, lCardType);
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_PCISERIALNR, lSerialNumber);
+
+			switch (lCardType & CardType.TYP_SERIESMASK)
+				{
+				case CardType.TYP_M2ISERIES:
+					System.out.println("M2i." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + " sn " + lSerialNumber);
+					break;
+
+				case CardType.TYP_M2IEXPSERIES:
+					System.out.println("M2i." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + "-Exp sn " + lSerialNumber);
+					break;
+
+				case CardType.TYP_M3ISERIES:
+					System.out.println("M3i." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + " sn " + lSerialNumber);
+					break;
+
+				case CardType.TYP_M3IEXPSERIES:
+					System.out.println("M3i." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + "-Exp sn " + lSerialNumber);
+					break;
+
+				case CardType.TYP_M4IEXPSERIES:
+					System.out.println("M4i." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + "-x8 sn " + lSerialNumber);
+					break;
+
+				case CardType.TYP_M4XEXPSERIES:
+					System.out.println("M4x." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + "-x4 sn " + lSerialNumber);
+					break;
+                    
+                case CardType.TYP_M2PEXPSERIES:
+                    System.out.println("M2p." + Integer.toHexString(lCardType & CardType.TYP_VERSIONMASK) + "-x4 sn " + lSerialNumber);
+                    break;                    
+
+				default: System.out.println("Typ: " + lCardType + " not supported so far");
+					break;
+				}
+
+			// ----- get max memsize -----
+			dwErrorCode = Drv.spcm_dwGetParam_i64(hDevice, Regs.SPC_PCIMEMSIZE, llInstMem);
+			System.out.println("  Installed memory  :  " + (llInstMem / 1024 / 1024) + " MByte");
+
+			// ----- get max samplerate -----
+			dwErrorCode = Drv.spcm_dwGetParam_i64(hDevice, Regs.SPC_MIINST_MAXADCLOCK, llMaxSamplerate);
+			System.out.println("  Max sampling rate :  " + (llMaxSamplerate / 1000000) + " MS/s");
+
+			// ----- get max number of channels -----
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_MIINST_MODULES, lValue);
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_MIINST_CHPERMODULE, lMaxChannels);
+			lMaxChannels *= lValue;
+			System.out.println("  Channels          :   " + lMaxChannels);
+
+			// ----- get kernel version -----
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_GETKERNELVERSION, lValue);
+			System.out.println("  Kernel Version    : " + (lValue >> 24) + "." + ((lValue >> 16) & 0xff) + " build " + (lValue & 0xffff));
+
+			// ----- get library version -----
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_GETDRVVERSION, lValue);
+			System.out.println("  Library Version   : " + (lValue >> 24) + "." + ((lValue >> 16) & 0xff) + " build " + (lValue & 0xffff));
+
+			// ----- get bytes per sample -----
+			dwErrorCode = Drv.spcm_dwGetParam_i32(hDevice, Regs.SPC_MIINST_BYTESPERSAMPLE, lBytesPerSample);
+
+			// ----- setup card -----
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_AMP0, 1000);
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_CARDMODE, Regs.SPC_REC_STD_SINGLE);
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_CHENABLE, 1);
+
+			// Hint : To program all 64 channels of a digital card, the bitmask needs a long extension
+			//dwErrorCode = Drv.spcm_dwSetParam_i64(hDevice, Regs.SPC_CHENABLE, 0xFFFFFFFFFFFFFFFFL);
+
+			dwErrorCode = Drv.spcm_dwSetParam_i64(hDevice, Regs.SPC_MEMSIZE, llMemSet);
+			dwErrorCode = Drv.spcm_dwSetParam_i64(hDevice, Regs.SPC_POSTTRIGGER, llMemSet / 2);
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_CLOCKMODE, Regs.SPC_CM_INTPLL);
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_SAMPLERATE, 100000);
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_TRIG_ORMASK, Regs.SPC_TMASK_SOFTWARE);
+
+			// ----- check error code and print error message -----
+			if ((int)dwErrorCode != 0)
+				{
+				Drv.spcm_dwGetErrorInfo_i32(hDevice, dwErrorReg, lErrorVal, sErrorText);
+				System.out.println("\nError occurred : " + sErrorText);
+				}
+
+			// ----- start card and wait until acquisition has finished -----
+			System.out.print("\n  Start acquisition ..... ");
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_M2CMD, Regs.M2CMD_CARD_START | Regs.M2CMD_CARD_ENABLETRIGGER | Regs.M2CMD_CARD_WAITREADY);
+			System.out.println("done");
+
+			// ----- set data transfer function -----
+			if (lBytesPerSample == 2)
+				{
+				// ----- 12, 14, 16 bit per sample -----
+				nData = new short[(int)llMemSet];
+				byData = null;
+
+				// ----- lock memory -----
+				hBufferHandle = GCHandle.Alloc(nData, GCHandleType.Pinned);
+				}
+			else
+				{
+				// ----- 8 bit per sample -----
+				byData = new byte[(int)llMemSet];
+				nData = null;
+
+				// ----- lock memory -----
+				hBufferHandle = GCHandle.Alloc(byData, GCHandleType.Pinned);
+				}
+
+			// ----- get pointer to locked memory -----
+			pBuffer = hBufferHandle.AddrOfPinnedObject();
+
+			dwErrorCode = Drv.spcm_dwDefTransfer_i64(hDevice, (UInt32)Drv.SPCM_BUF_DATA, (UInt32)Drv.SPCM_DIR_CARDTOPC, (UInt32)0, pBuffer, (UInt64)0, (UInt64)(lBytesPerSample * llMemSet));
+
+			// ----- start DMA data transfer and wait until transfer has finished -----
+			System.out.print("  Start data transfer ... ");
+			dwErrorCode = Drv.spcm_dwSetParam_i32(hDevice, Regs.SPC_M2CMD, Regs.M2CMD_DATA_STARTDMA | Regs.M2CMD_DATA_WAITDMA);
+			System.out.println("done");
+
+			// ----- get some data infos -----
+			nMin = 32767;
+			nMax = -32768;
+			llAverage = 0;
+
+			for (i = 0; i < llMemSet; i++)
+				{
+				if (lBytesPerSample == 2)
+					{
+					if (nData[i] < nMin) nMin = nData[i];
+					if (nData[i] > nMax) nMax = nData[i];
+					llAverage += nData[i];
+					}
+				else
+					{
+					if (byData[i] < nMin) nMin = byData[i];
+					if (byData[i] > nMax) nMax = byData[i];
+					llAverage += byData[i];
+					}
+				}
+
+			llAverage = llAverage / llMemSet;
+
+			System.out.println("\n  Data Info:");
+			System.out.println("    Min value = " + nMin);
+			System.out.println("    Max value = " + nMax);
+			System.out.println("    Average   = " + llAverage);
+			System.out.println();
+
+			// ----- close card -----
+			Drv.spcm_vClose(hDevice);
+			}
+		}
+	}

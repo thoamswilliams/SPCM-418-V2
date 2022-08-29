@@ -1,0 +1,157 @@
+Installation of spcm linux driver for Spectrum M2i/M3i series
+---------------------------------------------------------
+(c) Spectrum GmbH
+    Ahrensfelder Weg 13-17
+    22927 Grosshansdorf
+    Germany
+    www.spectrum-instrumention.com
+---------------------------------------------------------
+support can be requested under support@spec.de
+---------------------------------------------------------
+
+
+This driver supports Linux distributions based on kernel 2.4 up to 5.x
+Systems with single processor as well as SMP systems are supported, both
+32 bit and 64 bit systems. The driver library supports the c and c++
+standard library version 6 (/usr/lib/libstdc++.so.6)
+
+The driver has been tested by Spectrum on all distributions for which we
+deliver pre-compiled kernel modules.
+See https://spectrum-instrumentation.com/en/supported-linux-distributions
+for a list of pre-compiled modules.
+On top of this the driver is running on much more distributions installed by
+customers.
+
+However Spectrum can give no guarantee that each installed Linux system in
+the world matching the above specification is running properly.
+
+If you encounter any problems with the installation please feel free to
+contact our support team under the above mentioned email. In case of support
+need please give the following details:
+- distribution you use (e.g. Fedora Core 4 64 Bit SMP version)
+- exact kernel version (cat /proc/version)
+- driver version you use (kernel module version and library version)
+- error description or compiler output
+
+
+
+Standard driver delivery
+------------------------
+The driver is delivered as installable kernel modules together with
+libraries to access the kernel driver. The installation script will
+help you with the installation of the kernel module and the library.
+
+Please run the following steps for the installation:
+
+
+
+1. Login as root
+
+It is necessary to have the root rights for installing a driver.
+
+
+
+2. Call the install.sh script
+
+./install.sh
+
+This script will check if there is a kernel driver package that matches your
+distribution and install it if a matching package is available.
+
+The script will also install the necessary user-space library libspcm_linux.so.
+
+
+
+3. Start the driver
+
+The driver should be started automatically at system boot.
+
+If you need to start the driver manually this can be done
+using the spcm_start.sh script that has been
+placed in the install directory. The start script will load the driver and
+make the required device nodes /dev/spcm0 ... for accessing the drivers.
+
+Please keep in mind that you need root rights to load the kernel module and to
+make the device nodes!
+
+
+
+4. Get first driver info
+
+After the driver has been loaded sucessful some information about the
+installed boards could be found in the /proc/spcm_cards file. Some
+basic information from the onboard EEProm is listed for every card.
+
+type "cat /proc/spcm_cards" to see the card and driver information
+
+
+
+5. Start programming
+
+Please add the library spcm_linux to your projects to have access to the
+driver functions. Using a makefiel this is done with:
+
+LIBS += -lspcm_linux
+
+You may start with the examples to see how the card is accessed under Linux.
+The examples are found in the spcm_examples/c_cpp directory.
+
+
+
+6. Stop the driver
+
+You may want to unload the driver and clean up all device node. This can be
+done using the commands "rmmod spcm" or "modprobe -r spcm" (without the ").
+
+
+
+Delivery of driver sources
+--------------------------
+The driver sources are only available for existing customers on special
+request. The driver sources are not part of the standard delivery.
+
+The driver source package contains only the sources of the kernel module,
+not the sources of the library.
+
+Please do the following steps for compilation and installation of the
+kernel driver module:
+
+
+
+1. Login as root
+
+It is necessary to have the root privileges for installing a driver.
+
+
+
+2. Call the compile script make_spcm_linux_kerneldrv.sh
+
+This script requires "bash" to be installed on the system.
+If you get a error message like "/bin/bash: bad interpreter" then most likely
+bash is missing on your system.
+
+The script will examine the type of system you use and compile the
+kernel with the correct settings. If using a kernel 2.4 the makefile
+expects two symbolic links in your system:
+
+/usr/src/linux pointing to the correct kernel source directory
+/usr/src/linux/.config pointing to the currently used kernel configuration
+
+The compile script will then automatically call the install script and
+install the just compiled kernel module in your home directory. The rest
+of the installation procedure is similar as explained above.
+
+
+
+3. Updating the kernel driver module
+
+Normally the kernel driver source only changes to adjust to new kernel versions.
+So most of the time you do not need to update the kernel driver as most
+changes are made in the user-space library which is available for download from here:
+https://spectrum-instrumentation.com/en/downloads/drivers
+On that page select your card, then select "LINUX Drivers + Software", and
+download the "Linux Driver Library" package.
+
+However, if you do need an updated kernel source package simply send an
+e-mail to support@spec.de
+
