@@ -1,3 +1,8 @@
+'''
+Updated: July 2021
+Yi Zhu, yi.zhu@berkeley.edu
+'''
+
 from pyspcm import *
 from spcm_tools import *
 import sys
