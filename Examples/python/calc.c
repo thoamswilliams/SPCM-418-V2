@@ -1,6 +1,11 @@
 #include <stdio.h>
 #include <math.h>
 
+/*
+Updated: July 2021
+Yi Zhu, yi.zhu@berkeley.edu
+*/
+
 // max value of 16-bit short
 #define SHORT_MAX 32767
 #define TP 2*M_PI
