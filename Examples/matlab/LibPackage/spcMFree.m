@@ -1,1 +1,0 @@
-spcm_vClose (int64 (-1));
