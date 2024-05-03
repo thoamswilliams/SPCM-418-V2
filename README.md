@@ -37,4 +37,4 @@ A pulse generation function is located at `SPCM-418-V2/v1/spcm_m4i_6631-x8_pulse
 
 Additionally, an arbitrary function generation utility is located at `SPCM-418-V2/v1/` and can generate a waveform given any numpy function that acts on arrays. This takes 2-3x as long as the pulse generation function written in C, when generating the same waveform, but allows for arbitrary waveforms to be generated.
 
-* Updated by Thomas Lu in May 2024. Originally written in August 2021 by Yi Zhu *
+*Updated by Thomas Lu in May 2024. Originally written in August 2021 by Yi Zhu*
