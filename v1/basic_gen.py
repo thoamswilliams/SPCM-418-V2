@@ -7,7 +7,7 @@ import ctypes
 import matplotlib.pyplot as plt
 
 def sequence(ch0=[], amp0=1, t = 1e-2,
-		sr=1.25e9, mode='continuous', loops=1, 
+		sr=1.024e9, mode='continuous', loops=1, 
 		trigger='sw', timeout=50):
 		"""
 		Generates and primes an arbitrary sequence in channel0.
@@ -17,10 +17,11 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 			amp0: amplitude of channel 0 in Volts  
 			t: period of the sequence, in seconds
 			sr: sample rate in Hz (max 1.25 GHz)
-			continuous: continuous playback after trigger
-			loops: if continuous is false, the pulse seqeuence is played back this many times
+			mode: options are "continuous", "gate", or any other value to play the set 
+			number of loops
+			loops: if mode is not continuous or gate, the pulse seqeuence is played back this 				many times
 			
-			trigger: trigger type is sw (software, immediate)
+			trigger: trigger type is sw (software, immediate), or ttl (external)
 			timeout: closes card if not triggered within this many seconds
 
 		Returns: None
@@ -33,9 +34,10 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		# open card
 		hCard = spcm_hOpen(create_string_buffer (b'/dev/spcm0'))
 		
-		#total number of samples must be divisible by 32. This is an easy way of enforcing that.
-		sr = sr - (sr % 128)
+		#number of samples must be divisible by 32.
 		llMemSamples = int64 (int(t*sr))
+		assert llMemSamples & 32 == 0, "number of samples must be divisible by 32"
+
 		spcm_dwSetParam_i64(hCard, SPC_SAMPLERATE,  int(sr)) 		# set samplerate
 		spcm_dwSetParam_i32(hCard, SPC_CLOCKOUT,    0)				# no clock output
 		spcm_dwSetParam_i32(hCard, SPC_AMP0,    	int32 (amp0))	# sets amplitude in mV
@@ -61,13 +63,24 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT0,  1) 	
 		spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT1,  0)
 
-		lBytesPerSample = int32 (0)
+		lBytesPerSample = int32 (0) #bytes per sample is usually 2
 		spcm_dwGetParam_i32 (hCard, SPC_MIINST_BYTESPERSAMPLE,  byref (lBytesPerSample))
 
 		# setup the trigger mode
 		if trigger == 'sw':
 			# software trigger: play immediately
-			spcm_dwSetParam_i32 (hCard, SPC_TRIG_ORMASK, SPC_TMASK_SOFTWARE) 
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_ORMASK,      SPC_TMASK_SOFTWARE) 
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_ANDMASK,     0)
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_CH_ORMASK0,  0)
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_CH_ORMASK1,  0)
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_CH_ANDMASK0, 0)
+			spcm_dwSetParam_i32 (hCard, SPC_TRIG_CH_ANDMASK1, 0)
+			spcm_dwSetParam_i32 (hCard, SPC_TRIGGEROUT,       0)
+		elif trigger == 'ttl':
+			spcm_dwSetParam_i32(hCard, SPC_TRIG_ORMASK, SPC_TMASK_NONE)  #disable default software trigger
+			spcm_dwSetParam_i32(hCard, SPC_TRIG_ANDMASK, SPC_TMASK_EXT0)  # Enable external trigger within the AND mask
+			spcm_dwSetParam_i32(hCard, SPC_TRIG_EXT0_LEVEL0, 2000)	# Trigger level is 2.0 V (2000 mV)
+			spcm_dwSetParam_i32(hCard, SPC_TRIG_EXT0_MODE, SPC_TM_HIGH)  # Setting up external trigger for HIGH level
 		
 		#generate the data
 		start = time.time()
@@ -81,18 +94,11 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		pnBuffer = cast(pvBuffer, ptr16) # cast to int16 pointer
 
 		np_buffer = np.ctypeslib.as_array(pnBuffer, shape=(llMemSamples.value,))
+
+		#generate a sequence (use 64-bit immediates)
 		time_seq = np.linspace(0, t, num=llMemSamples.value, dtype = np.float64)
 		amp_seq = 0.5*np.sin((time_seq *(80e6*2) % 2) * np.pi)
 		amp_seq = amp_seq + 0.5*np.sin((time_seq *(85e6*2) % 2) * np.pi)
-		#time_seq_32 = np.linspace(0, t, num=llMemSamples.value, dtype = np.float32)
-		#amp_seq_32 = np.sin((time_seq_32 *(80e6*2)) * np.pi)
-		
-		#print(np.mean((amp_seq - amp_seq_32)**2)**0.5)
-		#print(len(amp_seq))
-		#plt.plot(time_seq[-50:], amp_seq[-50:], label = "64 bit")
-		#plt.plot(time_seq_32[-50:], amp_seq_32[-50:], label = "32 bit")
-		#plt.legend()
-		#plt.show()
 		amp_seq = np.multiply(2**15-1,amp_seq).astype(np.int16)
 		
 

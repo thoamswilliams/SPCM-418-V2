@@ -63,7 +63,7 @@ with spcm.Card('/dev/spcm0') as card:                         # if you want to o
     data_transfer.start_buffer_transfer(spcm.M2CMD_DATA_STARTDMA, spcm.M2CMD_DATA_WAITDMA) # Wait for the writing to buffer being done
 
     # We'll start and wait until the card has finished or until a timeout occurs
-    card.timeout(50 * units.s)
+    card.timeout(10 * units.s)
     print("Starting the card and waiting for ready interrupt\n(continuous and single restart will have timeout)")
     try:
         card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_WAITREADY)
