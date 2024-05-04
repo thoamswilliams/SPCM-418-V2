@@ -6,29 +6,35 @@ import numpy as np
 import ctypes
 import matplotlib.pyplot as plt
 
-def sequence(ch0=[], amp0=1, t = 1e-2,
+def sequence(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
 		sr=1.024e9, mode='continuous', loops=1, 
 		trigger='sw', timeout=50):
 		"""
 		Generates and primes an arbitrary sequence in channel0.
 
 		Parameters:
-			ch0: sequence for channel 0. The structure of a pulse sequence is: 
-			amp0: amplitude of channel 0 in Volts  
+			ch0: function for channel 0. This should accept a numpy array of length num_samples,
+			  containing times (0, t) and output an array of amplitudes in (-1,1). Ideally, this
+			  function should be periodic with period t.
+			ch1: function for channel 1. See above description.
+			amp0: amplitude of channel 0 in Volts
+			amp1: amplitude of channel 1 in Volts  
 			t: period of the sequence, in seconds
 			sr: sample rate in Hz (max 1.25 GHz)
 			mode: options are "continuous", "gate", or any other value to play the set 
 			number of loops
-			loops: if mode is not continuous or gate, the pulse seqeuence is played back this 				many times
+			loops: if mode is not continuous or gate, the pulse seqeuence is played back this many times
 			
 			trigger: trigger type is sw (software, immediate), or ttl (external)
 			timeout: closes card if not triggered within this many seconds
 
 		Returns: None
 		"""
-
+		if not (ch0 or ch1):
+			return
 		# translate values
 		amp0 *= 1000
+		amp1 *= 1000
 		timeout *= 1000
 
 		# open card
@@ -39,8 +45,10 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		assert llMemSamples & 32 == 0, "number of samples must be divisible by 32"
 
 		spcm_dwSetParam_i64(hCard, SPC_SAMPLERATE,  int(sr)) 		# set samplerate
-		spcm_dwSetParam_i32(hCard, SPC_CLOCKOUT,    0)				# no clock output
-		spcm_dwSetParam_i32(hCard, SPC_AMP0,    	int32 (amp0))	# sets amplitude in mV
+		spcm_dwSetParam_i32(hCard, SPC_CLOCKOUT, 0)				# no clock output
+		spcm_dwSetParam_i32(hCard, SPC_AMP0, int32 (amp0))	# sets amplitude in mV
+		spcm_dwSetParam_i32(hCard, SPC_AMP1, int32 (amp1))	# sets amplitude in mV
+
 
 		if mode == 'continuous':
 			loops = int64(0)
@@ -51,7 +59,16 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		else:
 			loops = int64(loops) #EP
 
-		qwChEnable = 1
+		qwChEnable = 0
+		lSetChannels = 0
+		if ch0:
+			qwChEnable += 1
+			lSetChannels += 1
+		if ch1:
+			qwChEnable += 2
+			lSetChannels += 1
+
+
 		spcm_dwSetParam_i64 (hCard, SPC_CHENABLE, qwChEnable) # enable channel appropriate channels
 		spcm_dwSetParam_i64 (hCard, SPC_MEMSIZE, llMemSamples) # memsize in samples per channel
 		spcm_dwSetParam_i64 (hCard, SPC_LOOPS, loops)
@@ -60,8 +77,15 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		spcm_dwGetParam_i64 (hCard, SPC_MEMSIZE, byref(mem_size))
 
 		# enable channel output
-		spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT0,  1) 	
-		spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT1,  0)
+		if qwChEnable==1:
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT0,  1) 	
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT1,  0) 	
+		elif qwChEnable==2:	
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT0,  0) 	
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT1,  1) 	
+		elif qwChEnable==3:
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT0,  1) 			
+			spcm_dwSetParam_i64 (hCard, SPC_ENABLEOUT1,  1)
 
 		lBytesPerSample = int32 (0) #bytes per sample is usually 2
 		spcm_dwGetParam_i32 (hCard, SPC_MIINST_BYTESPERSAMPLE,  byref (lBytesPerSample))
@@ -88,20 +112,34 @@ def sequence(ch0=[], amp0=1, t = 1e-2,
 		# setup software buffer
 		# buffer size = samples per channel * bytes per sample * number of channels
 		#buffer size must be a multiple of 32
-		qwBufferSize = uint64(llMemSamples.value * lBytesPerSample.value)
+		qwBufferSize = uint64(llMemSamples.value * lBytesPerSample.value * lSetChannels)
 
 		pvBuffer = pvAllocMemPageAligned (qwBufferSize.value)
 		pnBuffer = cast(pvBuffer, ptr16) # cast to int16 pointer
 
-		np_buffer = np.ctypeslib.as_array(pnBuffer, shape=(llMemSamples.value,))
+		np_buffer = np.ctypeslib.as_array(pnBuffer, shape=(llMemSamples.value * lSetChannels,))
 
 		#generate a sequence (use 64-bit immediates)
 		time_seq = np.linspace(0, t, num=llMemSamples.value, dtype = np.float64)
-		amp_seq = 0.5*np.sin((time_seq *(80e6*2) % 2) * np.pi)
-		amp_seq = amp_seq + 0.5*np.sin((time_seq *(85e6*2) % 2) * np.pi)
-		amp_seq = np.multiply(2**15-1,amp_seq).astype(np.int16)
-		
 
+		#single channel actions
+		if(ch0 and not ch1):
+			amp_seq = ch0(time_seq)
+		if(ch1 and not ch0):
+			amp_seq = ch1(time_seq)
+		#if dual channel, then concatenate
+		if(ch1 and ch0):
+			amp_seq_0 = ch0(time_seq)
+			amp_seq_1 = ch1(time_seq)
+			amp_seq = np.concatenate((amp_seq_0, amp_seq_1))
+
+		#convert to int32 to send to the card
+		amp_seq = np.multiply(2**15-1,amp_seq).astype(np.int16)
+
+		#amp_seq = 0.5*np.sin((time_seq *(80e6*2) % 2) * np.pi)
+		#amp_seq = amp_seq + 0.5*np.sin((time_seq *(85e6*2) % 2) * np.pi)
+		
+		#send to the provided buffer
 		np.add(np_buffer, amp_seq, out = np_buffer)
 		
 		#print(np_buffer)
