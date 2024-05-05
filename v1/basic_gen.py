@@ -6,9 +6,9 @@ import numpy as np
 import ctypes
 import matplotlib.pyplot as plt
 
-def sequence(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
+def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
 		sr=1.024e9, mode='continuous', loops=1, 
-		trigger='sw', timeout=50):
+		trigger='sw', timeout=10):
 		"""
 		Generates and primes an arbitrary sequence in channel0.
 
@@ -173,4 +173,4 @@ def sequence(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
 		print('Card Started')
 		spcm_vClose (hCard)
 
-sequence()
+awg()
