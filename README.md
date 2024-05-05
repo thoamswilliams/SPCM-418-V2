@@ -42,4 +42,5 @@ Additionally, an arbitrary function generation utility is located at `SPCM-418-V
 * The card memory buffer must be a multiple of 32 in size. Attempts to allocate a buffer of any other size have a tendency to silently fail.
 * If the amplitude given to the card exceeds the preset value, the card will cap the amplitude at the specified value, most likely destroying the shape of the waveform. This applies to DDS as well, and for this reason it is recommended to ensure that all factors for a given channel add to 1.
 * There will be significant error induced by 32-bit floating point inprecision when more than 1M samples are used. For this reason, 64-bit intermediate values are recommended for calculation, even though they will eventually be converted to int16 before being sent to the card.
+
 *Updated by Thomas Lu in May 2024. Originally written in August 2021 by Yi Zhu*
