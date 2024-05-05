@@ -114,7 +114,7 @@ def tone(ch0=[], ch1=[], amp0=1, amp1=1, continuous=False, loops=1,
                 dds[core].freq(freqs[core])
                 dds[0].phase(0 * units.degrees)
             dds.exec_at_trg()
-            dds.write_to_card()
+        dds.write_to_card()
         
 
         # Start command including enable of trigger engine
