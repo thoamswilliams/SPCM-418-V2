@@ -37,4 +37,9 @@ A pulse generation function is located at `SPCM-418-V2/v1/spcm_m4i_6631-x8_pulse
 
 Additionally, an arbitrary function generation utility is located at `SPCM-418-V2/v1/arb_gen.py` and can generate a waveform given any numpy function that acts on arrays. This takes 2-3x as long as the pulse generation function written in C, when generating the same waveform, but allows for arbitrary waveforms to be generated.
 
+## Debugging Notes
+* When using the old library, the card will fail silently if given an invalid command, and lock itself until the error code is manually read and the card is reset. In this state, all attempts to write to the card will fail, and all read commands will return a value of 0. This is a potential cause of segfaults, if downstream code tries to write to a null memory address given by an erroring card. While the new library seems to do a better job of catching these sorts of errors, it is not perfect, and could still fail silently.
+* The card memory buffer must be a multiple of 32 in size. Attempts to allocate a buffer of any other size have a tendency to silently fail.
+* If the amplitude given to the card exceeds the preset value, the card will cap the amplitude at the specified value, most likely destroying the shape of the waveform. This applies to DDS as well, and for this reason it is recommended to ensure that all factors for a given channel add to 1.
+* There will be significant error induced by 32-bit floating point inprecision when more than 1M samples are used. For this reason, 64-bit intermediate values are recommended for calculation, even though they will eventually be converted to int16 before being sent to the card.
 *Updated by Thomas Lu in May 2024. Originally written in August 2021 by Yi Zhu*
