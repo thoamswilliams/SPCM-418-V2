@@ -15,25 +15,28 @@ See the LICENSE file for the conditions under which this software may be used an
 import spcm
 from spcm import units
 
-def tone(ch0=[], ch1=[], amp0=1, amp1=1, continuous=False, loops=1, 
-    trigger='ttl', timeout=1):
+def tone(ch0=[], ch1=[], amp0=1, amp1=1, loops=1, 
+    trigger='sw'):
     """
     Generates and primes a pulse sequence.
 
     Parameters:
         ch0: pulse sequence for channel 0. The structure of a pulse sequence is: [f1, start1, end1, factor1,  
                                                                                     f2, start2, end2, factor2, ...]
-        ch1: pulse sequence for channel 1. **The combined length of the ch0 and ch1 pulse sequences should be no greater
-        than the number of DDS cores. All factors should add up to 1 for each channel.
+        ch1: pulse sequence for channel 1. 
+
+        **** Specify frequencies in Hz and times in seconds. The combined number of waveforms in the ch0 and ch1 
+        pulse sequences should be no greater than the number of DDS cores. All factors should add up to 1 for each channel. ****
+
         amp0: amplitude of channel 0 in Volts
         amp1: amplitude of channel 1 in Volts
         
-        continuous: continuous playback after trigger
         loops: if continuous is false, the pulse seqeuence is played back this many times
         
+        #TODO NOT IMPLEMENTED YET
         trigger: trigger type, ttl or sw (software, immediate)
-        trigger_level: set trigger level in Volts
-        timeout: closes card if not triggered within this many seconds
+        The only trigger currently implemented is software, with immediate activation. To implement TTL triggering, use the
+        SPCM_DDS_TRG_SRC_CARD option from the manual.
 
     Returns: None
     """
@@ -76,11 +79,14 @@ def tone(ch0=[], ch1=[], amp0=1, amp1=1, continuous=False, loops=1,
         num_freqs_1 = len(ch1)/4
         assert num_freqs_0 + num_freqs_1 <= dds.num_cores(), "not enough DDS cores for the given waveform"
 
-        ch0_cores_mask = 2**(num_freqs_0+1)-1 #set bitmask for cores assigned to ch0
+        # Assign cores. The input to each channel is a bitmap with num_cores() bits, where a 1 in position
+        # i indicates that core i is assigned to that particular channel, and a 0 if otherwise.
+
+        ch0_cores_mask = 2**(num_freqs_0+1)-1 #set bitmask for cores assigned to ch0: set the first num_freqs_0 bits 1
         dds.cores_on_channel(0, ch0_cores_mask)
 
         ch1_cores_mask = 2**(num_freqs_0+num_freqs_1+1)-1 - ch0_cores_mask
-        dds.cores_on_channel(1, ch1_cores_mask) #set bitmask for cores assigned to ch1
+        dds.cores_on_channel(1, ch1_cores_mask) #set bitmask for cores assigned to ch1: set bits between num_freqs_0 and num_freqs_1 to 1
 
         freqs = ch0[0::4] + ch1[0::4]
         start_times = ch0[1::4] + ch1[1::4]
@@ -104,20 +110,23 @@ def tone(ch0=[], ch1=[], amp0=1, amp1=1, continuous=False, loops=1,
         #setup the trigger
         dds.trg_src(spcm.DDS_TRG_SRC_TIMER)
         # Run events
-        for event in events:
-            core = event[1]
-            dds.trg_timer(event[2])
-            if(event[0] == "off"):
-                dds[core].amp(0)
-            elif(event[0] == "on"):
-                dds[core].amp(factors[core])
-                dds[core].freq(freqs[core])
-                dds[0].phase(0 * units.degrees)
-            dds.exec_at_trg()
-        dds.write_to_card()
+        for _ in range(loops):
+            for event in events:
+                core = event[1]
+                dds.trg_timer(event[2])
+                if(event[0] == "off"):
+                    dds[core].amp(0)
+                elif(event[0] == "on"):
+                    dds[core].amp(factors[core])
+                    dds[core].freq(freqs[core])
+                    dds[0].phase(0 * units.degrees)
+                dds.exec_at_trg()
+            dds.write_to_card()
         
 
         # Start command including enable of trigger engine
         card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_WAITREADY)
 
         input("Press Enter to Exit")
+
+tone([1e6, 0, 10, 0.5, 5e6, 5, 15, 0.5])
