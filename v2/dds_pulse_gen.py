@@ -15,8 +15,8 @@ See the LICENSE file for the conditions under which this software may be used an
 import spcm
 from spcm import units
 
-def tone(ch0=[], ch1=[], amp0=1, amp1=1, loops=1, 
-    trigger='sw'):
+def tone(ch0=[], ch1=[], amp0=1, amp1=1, loops=2, 
+    trigger='sw', timeout = 30):
     """
     Generates and primes a pulse sequence.
 
@@ -65,7 +65,7 @@ def tone(ch0=[], ch1=[], amp0=1, amp1=1, loops=1,
         card.write_setup()
         
         # Setup DDS functionality
-        dds = spcm.DDS(card, channels=channels)
+        dds = spcm.DDS(card)
         dds.reset()
 
         '''
@@ -77,56 +77,81 @@ def tone(ch0=[], ch1=[], amp0=1, amp1=1, loops=1,
         #preprocess pulses into DDS events
         num_freqs_0 = len(ch0)/4
         num_freqs_1 = len(ch1)/4
-        assert num_freqs_0 + num_freqs_1 <= dds.num_cores(), "not enough DDS cores for the given waveform"
-
         # Assign cores. The input to each channel is a bitmap with num_cores() bits, where a 1 in position
         # i indicates that core i is assigned to that particular channel, and a 0 if otherwise.
 
-        ch0_cores_mask = 2**(num_freqs_0+1)-1 #set bitmask for cores assigned to ch0: set the first num_freqs_0 bits 1
-        dds.cores_on_channel(0, ch0_cores_mask)
+        #all cores are set to ch0 by default. Only cores 8-19 can be set to ch1, in groups of 4 channels.
+        #refer to pg. 139 of the manual for a full explanation
 
-        ch1_cores_mask = 2**(num_freqs_0+num_freqs_1+1)-1 - ch0_cores_mask
+        num_cores_0 = max(8, 4 + (num_freqs_0 //4)*4) #round up to the next multiple of 4 cores. Also, first 8 cores must be ch0
+        num_cores_1 = 4+(num_freqs_1 //4)*4
+        assert num_cores_0 + num_cores_1 <= 20, "not enough DDS cores for the given waveform"
+        assert num_cores_1 <= 12, "not enough DDS cores on ch1 for the given waveform"
+
+        ch0_cores_mask = int(2**(num_cores_0)-1)
+
+        ch1_cores_mask = int(2**(num_cores_0+num_cores_1)-1 - ch0_cores_mask)
+
         dds.cores_on_channel(1, ch1_cores_mask) #set bitmask for cores assigned to ch1: set bits between num_freqs_0 and num_freqs_1 to 1
 
-        freqs = ch0[0::4] + ch1[0::4]
-        start_times = ch0[1::4] + ch1[1::4]
-        end_times = ch0[2::4] + ch1[2::4]
-        factors = ch0[3::4] + ch1[3::4]
+        dds.load_cores()
+
+        # pad after ch0 with negative numbers to account for the extra unused cores. This is somewhat questionable w.r.t. coding practices but probably the easiest way to handle them.
+        num_core0_pad = int(num_cores_0 - num_freqs_0)
+
+        freqs = ch0[0::4] + [-1]* num_core0_pad + ch1[0::4]
+        start_times = ch0[1::4] + [-1]* num_core0_pad + ch1[1::4]
+        end_times = ch0[2::4] +[-1]* num_core0_pad + ch1[2::4]
+        factors = ch0[3::4] +[-1]* num_core0_pad + ch1[3::4]
 
         events = []
         for i in range(len(start_times)):
-            event = ("on", i, start_times[i]) #format: on/off, core ID, time
+            #don't make events for padding cores
+            if(start_times[i] < 0):
+                continue
+            event = ["on", i, start_times[i]] #format: on/off, core ID, time
             events.append(event)
         for i in range(len(end_times)):
-            event = ("off", i, end_times[i]) #format: on/off, core ID, time
+            #don't make events for padding cores
+            if(start_times[i] < 0):
+                continue
+            event = ["off", i, end_times[i]] #format: on/off, core ID, time
             events.append(event)
         
         events.sort(key = lambda i: i[2]) #sort in increasing order of time
 
         #convert from absolute time stamps to intervals
-        for i in reversed(range(1,len(events))):
-            events[i][2] = events[i][2] - events[i-1][2]
-        events[0][2] = 0
+        new_times = [0]*len(events)
+        for i in range(0,len(events)-1):
+            new_times[i] = events[i+1][2] - events[i][2]
+        for i in range(len(events)):
+            events[i][2] = new_times[i]
+
         #setup the trigger
-        dds.trg_src(spcm.DDS_TRG_SRC_TIMER)
+        dds.trg_src(spcm.SPCM_DDS_TRG_SRC_TIMER)
         # Run events
         for _ in range(loops):
             for event in events:
                 core = event[1]
-                dds.trg_timer(event[2])
                 if(event[0] == "off"):
                     dds[core].amp(0)
                 elif(event[0] == "on"):
                     dds[core].amp(factors[core])
                     dds[core].freq(freqs[core])
                     dds[0].phase(0 * units.degrees)
-                dds.exec_at_trg()
-            dds.write_to_card()
-        
-
+                if(event[2] > 8.5e-8): #the minimum permissible trigger time is 83.2ns according to the manual (16-bit float). If the time is too short, run the next event immediately as well.
+                    dds.trg_timer(event[2])
+                    dds.exec_at_trg()
+        #trigger one more time to make sure all events process
+        dds.trg_timer(1e-7)
+        dds.exec_at_trg()
+        dds.write_to_card()
+        print("DDS commands loaded and card started")
         # Start command including enable of trigger engine
-        card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_WAITREADY)
+        card.timeout(timeout*units.s)
+        card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_FORCETRIGGER)
 
         input("Press Enter to Exit")
 
-tone([1e6, 0, 10, 0.5, 5e6, 5, 15, 0.5])
+tone(ch0=[1e6, 0, 4, 0.25, 2e6, 0, 4, 0.25, 5e6, 2, 6, 0.5], 
+        ch1=[1e6, 0, 4, 0.25, 2e6, 0, 4, 0.25, 5e6, 2, 6, 0.5], loops=2)
