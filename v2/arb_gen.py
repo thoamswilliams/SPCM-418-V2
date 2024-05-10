@@ -20,7 +20,7 @@ from spcm import units
 import numpy as np
 
 def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
-		sr=1024 * units.MHz, mode='continuous', loops=1, 
+		sr=1.024e9, mode='continuous', loops=1, 
 		trigger='sw', timeout=10):
     """
     Generates and primes an arbitrary sequence in channel0.
@@ -57,6 +57,12 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
             card.card_mode(spcm.SPC_REP_STD_GATE)
 
         # Enable the channels and setup amplitude
+        enable_mask=0 #2-bit mask where first bit is ch0 and second bit is ch1
+        if(ch0):
+            enable_mask+=1
+        if(ch1):
+            enable_mask+=2
+        channels = spcm.Channels(card, card_enable = enable_mask)
         channel0 = spcm.Channel(0, card)
         channel1 = spcm.Channel(1, card)
 
@@ -68,15 +74,14 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
             channel1.enable(True)
             channel1.output_load(50 * units.ohm) #50 ohm load
             channel1.amp(amp1 * units.V)
-            
         # Setup the clock
         clock = spcm.Clock(card)
         # set samplerate to 50 MHz (M4i) or 1 MHz (otherwise), no clock output
         clock.sample_rate(sr)
         clock.clock_output(0)
 
-        num_samples = t * sr
-        assert num_samples & 32 == 0, "number of samples must be divisible by 32"
+        num_samples = int(t * sr)
+        assert num_samples % 32 == 0, f"number of samples must be divisible by 32, actual was {num_samples}"
 
         # setup the trigger mode
         trigger = spcm.Trigger(card)
@@ -89,7 +94,6 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
             trigger.ext0_level1(2000*units.mV)
             trigger.ext0_mode(spcm.SPC_TM_HIGH)
 
-
         data_transfer = spcm.DataTransfer(card)
         if data_transfer.bytes_per_sample != 2: raise spcm.SpcmException(text="Non 16-bit DA not supported")
 
@@ -100,7 +104,6 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
             data_transfer.loops(0) # loop continuously
         else:
             data_transfer.loops(loops)
-        # simple ramp for analog output cards
         
         time_seq = np.linspace(0, t, num=num_samples, dtype = np.float64)
 
@@ -134,6 +137,12 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
         try:
             card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_WAITREADY)
             input("Press Enter to Exit")
-            card.reset()
+
         except spcm.SpcmTimeout as timeout:
             print("-> The 10 seconds timeout have passed and the card is stopped")
+
+def sine_wave(t):
+        t = np.sin(t * 2*np.pi * 1e6)
+        return t
+
+awg(ch0=sine_wave, ch1=sine_wave, timeout = 5)
