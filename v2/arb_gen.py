@@ -84,15 +84,14 @@ def awg(ch0 = None, ch1 = None, amp0=1, amp1 = 1, t = 1e-2,
         assert num_samples % 32 == 0, f"number of samples must be divisible by 32, actual was {num_samples}"
 
         # setup the trigger mode
-        trigger = spcm.Trigger(card)
+        trigger_module = spcm.Trigger(card)
         if(trigger == "sw"):
-            trigger.or_mask(spcm.SPC_TMASK_SOFTWARE)
+            trigger_module.or_mask(spcm.SPC_TMASK_SOFTWARE)
         elif(trigger == "ttl"):
-            trigger.or_mask(spcm.SPC_TMASK_NONE) #disable default software trigger
-            trigger.and_mask(spcm.SPC_TMASK_EXT0) # Enable external trigger within the AND mask
-            trigger.ext0_level0(0*units.mV)
-            trigger.ext0_level1(2000*units.mV)
-            trigger.ext0_mode(spcm.SPC_TM_HIGH)
+            trigger_module.or_mask(spcm.SPC_TMASK_NONE) #disable default software trigger
+            trigger_module.and_mask(spcm.SPC_TMASK_EXT0) # Enable external trigger within the AND mask
+            trigger_module.ext0_level0(2000*units.mV)
+            trigger_module.ext0_mode(spcm.SPC_TM_HIGH)
 
         data_transfer = spcm.DataTransfer(card)
         if data_transfer.bytes_per_sample != 2: raise spcm.SpcmException(text="Non 16-bit DA not supported")
