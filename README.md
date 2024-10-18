@@ -10,8 +10,10 @@ The board comes with Windows and Linux drivers as well as a programming interfac
 
 Potentially useful information:
 - The username/password for the computer where this is currently installed is *Lattice, S12D52qubit*
-- The drivers may require a specific Ubuntu kernel. If the software does not detect the card after it is installed, it may be necessary to manually select the correct kernel when booting the computer. The current installation requires Ubuntu 14.04 with kernel `3.13.0-24-generic`
+- The drivers may require a specific Ubuntu kernel. If the software does not detect the card after it is installed, it may be necessary to manually select the correct kernel when booting the computer. The current installation requires Ubuntu 16.04 with kernel `4.4.0-21-generic`
 - The documentation for the API is located at: `SPCM-418-V2/Doc/english/hwmanuals/m4i_m4x_66xx`
+- The computer where this is currently installed has a Python 3.11.7 conda installation with the SPCM library. To activate, use
+`source anaconda3/bin/activate`
 
 ## Overview
 In order to generate pulse sequences, our python script must (1) establish a connection with the Spectrum AWG board, (2) calculate the array of voltages that the AWG DAC should output, (3) send this data to the AWG board, (4) enable triggering of the AWG.
